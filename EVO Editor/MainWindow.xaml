@@ -17,12 +17,17 @@
             </Menu>
             <StackPanel></StackPanel>
         </DockPanel>
-        <RichTextBox x:Name="editor" AcceptsTab="True" TextChanged="Editor_TextChanged" Keyboard.PreviewKeyDown="Editor_KeyDown" HorizontalAlignment="Left" Height="301" Margin="0,18,0,0" VerticalAlignment="Top" Width="517" Background="#FF1C1F1F" Foreground="#FFC5C5C5" SelectionBrush="Red">
+        <RichTextBox x:Name="editor" AcceptsTab="True" FontSize="12" TextChanged="Editor_TextChanged" Keyboard.PreviewKeyDown="Editor_PreviewKeyDown" PreviewMouseDown="Editor_PreviewMouseDown" PreviewMouseWheel="Editor_PreviewMouseWheel"  HorizontalAlignment="Left" Height="301" Margin="0,18,0,0" VerticalAlignment="Top" Width="517" Background="#FF1C1F1F" Foreground="#FFF1F1F1" SelectionBrush="Red">
             <FlowDocument>
                 <Paragraph Margin="0">
                     <Run Text=""/>
                 </Paragraph>
             </FlowDocument>
+            <RichTextBox.Resources>
+                <Style TargetType="{x:Type Paragraph}">
+                    <Setter Property="Margin" Value="0"/>
+                </Style>
+            </RichTextBox.Resources>
         </RichTextBox>
     </Grid>
 </Window>

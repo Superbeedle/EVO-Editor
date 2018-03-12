@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,17 +24,21 @@ namespace EVO_Editor {
 	public partial class MainWindow : Window {
 
 		public string filePath;
+		
 		public enum FileExtension {
 			TXT,
 			HTML
 		}
+		public FileExtension fileExtension;
+
 		public MainWindow() {
 			InitializeComponent();
 			filePath = Properties.Settings.Default.filePath;
 			if (filePath != "") {
 				editor.AppendText(File.ReadAllText(filePath));
-				Title = "Evo - " + filePath;//.Substring(filePath.LastIndexOf('\\'));
-				//Syntax_Coloring(FileExtension.HTML);
+				Title = "EVO - " + filePath;
+				string fileType = filePath.Substring(filePath.LastIndexOf('.') + 1).ToUpper();
+				Enum.TryParse<FileExtension>(fileType, out fileExtension);
 			}
 			
 		}
@@ -68,7 +73,7 @@ namespace EVO_Editor {
 				filePath = saveFileDialog.FileName;
 				string fileType = safeFileName.Substring(safeFileName.LastIndexOf('.') + 1);
 				fileType = fileType.ToUpper();
-				Enum.TryParse<FileExtension>(fileType, out FileExtension fileExtension);
+				Enum.TryParse<FileExtension>(fileType, out fileExtension);
 				//Syntax_Coloring(fileExtension);
 				Properties.Settings.Default.filePath = filePath;
 			}
@@ -97,19 +102,105 @@ namespace EVO_Editor {
 			}		
 		}
 
-		private void Syntax_Coloring(FileExtension fileExtension) {
-			if (fileExtension == FileExtension.HTML) {
-				// cyan
-				SolidColorBrush brush = new SolidColorBrush(Colors.Green);//(Color)ColorConverter.ConvertFromString("#00dbd7ff"));
-																		  //editor.ColorTags('<', '>', brush);
-				editor.ColorKeyword("red", new SolidColorBrush(Colors.Red));
+		public static IEnumerable<TextRange> GetAllWordRanges(FlowDocument document, string regexPattern) {
+			string pattern = @regexPattern;
+			TextPointer pointer = document.ContentStart;
+			while (pointer != null) {
+				if (pointer.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.Text) {
+					string textRun = pointer.GetTextInRun(LogicalDirection.Forward);
+					MatchCollection matches = Regex.Matches(textRun, pattern);
+					foreach (Match match in matches) {
+						int startIndex = match.Index;
+						int length = match.Length;
+						TextPointer start = pointer.GetPositionAtOffset(startIndex);
+						TextPointer end = start.GetPositionAtOffset(length);
+						yield return new TextRange(start, end);
+					}
+				}
+
+				pointer = pointer.GetNextContextPosition(LogicalDirection.Forward);
 			}
 		}
 
-		private void Editor_KeyDown(object sender, KeyEventArgs e) {
-			if (e.Key == Key.Enter) {
-				Syntax_Coloring(FileExtension.HTML);
+		private void Editor_PreviewKeyDown(object sender, KeyEventArgs e) {
+			TextRange allText = new TextRange(editor.Document.ContentStart, editor.Document.ContentEnd);
+			allText.ClearAllProperties();
+
+			IEnumerable<TextRange> tagRanges = GetAllWordRanges(editor.Document, "<(.*?)>");
+			bool decolorNextRange = false;
+			if (fileExtension == FileExtension.HTML) {
+				foreach (TextRange wordRange in tagRanges) {
+					if (wordRange.Text.Contains("<") && wordRange.Text.Contains(">")) {
+						wordRange.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.Red);
+						decolorNextRange = true;
+					}	else if (decolorNextRange == true) {
+						wordRange.ClearAllProperties();
+						decolorNextRange = false;
+					}
+				}
+				IEnumerable<TextRange> idRanges = GetAllWordRanges(editor.Document, "\\sid\\=");
+				decolorNextRange = false;
+				foreach (TextRange wordRange in idRanges) {
+					if (wordRange.Text.Contains("id")) {
+						wordRange.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.Yellow);
+						wordRange.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Bold);
+						decolorNextRange = true;
+					}	else if (decolorNextRange == true) {
+						wordRange.ClearAllProperties();
+						wordRange.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.Red);
+						decolorNextRange = false;
+					}
+				}
+				IEnumerable<TextRange> classRanges = GetAllWordRanges(editor.Document, "\\sclass\\=");
+				decolorNextRange = false;
+				foreach (TextRange wordRange in classRanges) {
+					if (wordRange.Text.Contains("class")) {
+						wordRange.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.Lime);
+						wordRange.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Bold);
+						decolorNextRange = true;
+					} else if (decolorNextRange == true) {
+						wordRange.ClearAllProperties();
+						wordRange.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.Red);
+						decolorNextRange = false;
+					}
+				}
+				IEnumerable<TextRange> quotesRanges = GetAllWordRanges(editor.Document, "\"(.*?)\"");
+				decolorNextRange = false;
+				foreach (TextRange wordRange in quotesRanges) {
+					if (wordRange.Text.Contains("\"")) {
+						wordRange.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.LightSkyBlue);
+						wordRange.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Italic);
+						decolorNextRange = true;
+					} else if (decolorNextRange == true) {
+						wordRange.ClearAllProperties();
+						wordRange.ApplyPropertyValue(TextElement.ForegroundProperty, Brushes.Red);
+						decolorNextRange = false;
+					}
+				}
+			}
+			
+			if (e.Key == Key.F5) {
+				System.Diagnostics.Process.Start(@filePath);
 			}
 		}
+
+		#region Resize Text
+		// Resize text by scrolling Mouse Wheel. Reset by pressing ctrl+MMB
+		private void Editor_PreviewMouseWheel(object sender, MouseWheelEventArgs e) {
+			if (Keyboard.IsKeyDown(Key.LeftCtrl)) {
+				if (e.Delta > 0) {
+					editor.FontSize++;
+				} else if (e.Delta < 0) {
+					editor.FontSize--;
+				}
+			}
+		}
+
+		private void Editor_PreviewMouseDown(object sender, MouseButtonEventArgs e) {
+			if (Keyboard.IsKeyDown(Key.LeftCtrl) && e.MiddleButton == MouseButtonState.Pressed) {
+				editor.FontSize = 12;
+			}
+		}
+		#endregion
 	}
 }
